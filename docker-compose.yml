@@ -1,0 +1,41 @@
+version: "3.8"
+services:
+  object-detection-on-qualcomm-hexagon:
+    container_name: Object-Detection-on-Qualcomm-Hexagon
+    image: harbor.edgesync.cloud/nagarro-container-images/object-detection-on-qualcomm-hexagon:v1
+    user: "0:0"
+    privileged: true
+    volumes:
+      - ./advantech-yolo.py:/workspace/advantech-yolo.py
+      - ./video:/workspace/video
+      - ./advantech-coe-model-export.sh:/workspace/advantech-coe-model-export.sh
+      - ./wise-bench.sh:/workspace/wise-bench.sh
+      - /etc/xdg/weston:/etc/xdg/weston
+      - /usr/share/X11:/usr/share/X11
+      - /dev/socket/weston:/dev/socket/weston
+      - /usr/bin/snpe-throughput-net-run:/usr/bin/snpe-throughput-net-run
+      - /usr/bin/snpe-platform-validator:/usr/bin/snpe-platform-validator
+      - /usr/bin/snpe-parallel-run:/usr/bin/snpe-parallel-run
+      - /usr/bin/snpe-net-run:/usr/bin/snpe-net-run
+      - /usr/bin/snpe-diagview:/usr/bin/snpe-diagview
+      - /usr/bin/qnn-net-run:/usr/bin/qnn-net-run
+      - /usr/bin/qnn-platform-validator:/usr/bin/qnn-platform-validator
+      - /dev:/dev
+    working_dir: /workspace
+    devices:
+      - /dev/fastrpc-cdsp-secure
+      - /dev/fastrpc-adsp-secure
+      - /dev/kgsl-3d0:/dev/kgsl-3d0
+      - /dev/dma_heap/system:/dev/dma_heap/system
+      - /dev/dma_heap/qcom,system:/dev/dma_heap/qcom,system
+      - /dev/dri:/dev/dri
+      - /dev/dri/card0:/dev/dri/card0
+      - /dev/dri/renderD128:/dev/dri/renderD128
+      - /dev/fastrpc-cdsp:/dev/fastrpc-cdsp
+      - /dev/video32:/dev/video32
+      - /dev/video33:/dev/video33
+    entrypoint: ["/bin/bash"]
+    network_mode: host
+    stdin_open: true
+    tty: true
+    restart: always
