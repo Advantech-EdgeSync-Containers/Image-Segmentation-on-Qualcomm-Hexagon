@@ -1,116 +1,123 @@
-# Object Detection on Qualcomm® Hexagon™
+# Image Segmentation on Qualcomm® Hexagon™
 
 ### About Advantech Container Catalog
-The **Advantech Container Catalog** delivers pre-integrated, hardware-accelerated containers optimized for rapid AI development on edge platforms. With support for the **Qualcomm® QCS6490**, these containers simplify the AI deployment pipeline by abstracting runtime dependencies, SDK installations, and toolchain configurations—letting developers focus on building impactful applications.
+The **Advantech Container Catalog** delivers hardware-accelerated AI containers pre-integrated for seamless edge deployment. These containers abstract complexities like SDK setup, runtime compatibility, and toolchain dependencies—offering rapid development pathways for platforms such as the **Qualcomm® QCS6490** SoC.
 
 ### Key benefits of the Container Catalog include:
-| Feature / Benefit            | Description                                                                           |
-| ---------------------------- | ------------------------------------------------------------------------------------- |
-| Hardware-Accelerated Edge AI | Leverages DSP/NPU acceleration via QNN, SNPE, and LiteRT for low-latency inference    |
-| YOLOv8 Ready Out-of-the-Box  | Supports both Ultralytics and AI Hub export workflows for rapid deployment            |
-| Dual Workflow Flexibility    | Toggle between rapid prototyping and optimized deployment with script-based workflows |
-| Multi-Model Format Support   | Compatible with `.tflite`, `.dlc`, and `.so` formats across runtimes                  |
-| End-to-End Tooling Included  | Comes with export, quantization, and benchmarking scripts                             |
-| Real-Time Vision Pipeline    | GStreamer + OpenCV integration for responsive video inference                         |
-| ROS-Compatible               | Designed for use with Qualcomm® Robotics Reference Distro + ROS                       |
-| Edge-Ready Use Cases         | Ideal for surveillance, retail, smart cities, robotics, and automation                |
-
+| Feature / Benefit                | Description                                                                     |
+| -------------------------------- | ------------------------------------------------------------------------------- |
+| Optimized for Image Segmentation | Full stack for semantic segmentation with real-time video inference support     |
+| Dual Export Workflows            | Supports both Qualcomm® AI Hub and Ultralytics-based model conversion pipelines |
+| DSP & GPU Acceleration           | Utilizes Hexagon™ DSP 770 and Adreno™ 643 GPU for low-latency inference         |
+| Multiple Runtime Support         | Integrated support for QNN, SNPE, and LiteRT runtimes                           |
+| Format Flexibility               | Compatible with `.tflite`, `.dlc`, and `.so` models                             |
+| Real-Time Vision Pipeline        | GStreamer-based multimedia framework with OpenCV integration                    |
+| Fully Scripted Deployment        | Includes automated scripts for model export, quantization, and benchmarking     |
+| ROS Integration                  | Compatible with Qualcomm Robotics Reference Distro with ROS 1.3-ver.1.1         |
+| Versatile Use Cases              | Tailored for robotics, smart surveillance, healthcare, automotive, and more     |
 
 ## Container Overview
 
-**Object Detection on Qualcomm® Hexagon™** is a plug-and-play container solution designed for running **YOLOv8 object detection** models on the **Qualcomm® QCS6490** platform. Built with **full DSP acceleration** support, it integrates the **QNN SDK**, **SNPE**, and **LiteRT** runtimes in a fully preconfigured environment, offering real-time detection capabilities out of the box.
+**Image Segmentation on Qualcomm® Hexagon™** is a comprehensive container solution for running real-time segmentation models on the **QCS6490** platform. Designed with **full DSP acceleration**, it brings plug-and-play deployment for models like **YOLOv8-seg** and **DeepLabv3+ MobileNet**, pre-optimized for edge scenarios.
 
 This container offers:
 
-* **Dual YOLOv8 Export Workflows**:
+* **Dual Image Segmentation Workflows**:
 
-  * **Ultralytics Export** for rapid model testing using TFLite format
-  * **Qualcomm® AI Hub Conversion** for optimized, INT8-accelerated deployments
+  * **Ultralytics Export**: Use YOLOv8-native tools to export to TFLite for rapid prototyping
+  * **AI Hub Conversion**: Import optimized DeepLabv3+ MobileNet models directly from Qualcomm’s Hugging Face repository
 
 * **Integrated Runtime Stack**:
 
-  * QNN, SNPE, and LiteRT for full DSP/GPU support
-  * GStreamer and OpenCV preconfigured for pipeline development
+  * Pre-installed support for **QNN**, **SNPE**, and **LiteRT**
+  * Includes **GStreamer**, **OpenCV**, and **Python 3.10** for full inference pipeline development
 
-* **Deployment-Ready Hardware Acceleration**:
+* **Hardware-Accelerated Inference**:
 
-  * Direct INT8 inference on **Hexagon™ DSP 770**
-  * GPU acceleration via **Adreno™ 643** for supported workloads
+  * INT8 inference on **Hexagon™ DSP 770**
+  * FP32 fallback and GPU acceleration via **Adreno™ 643 GPU**
 
-* **Flexible Model Format Support**:
+* **Multi-Model Format Compatibility**:
 
-  * Compatible with **TFLite**, **SNPE DLC**, and **QNN .so** model libraries
+  * Runs **.tflite**, **.dlc**, and **.so** formats natively with supported runtimes
 
-* **Preloaded Scripts & Tools**:
+* **Preconfigured Scripts & Utilities**:
 
-  * `advantech-coe-model-export.sh` and `advantech-aihub-model-export.sh` for fast conversion
-  * `wise-bench.sh` for runtime environment verification
+  * `advantech-coe-model-export.sh` and `advantech-aihub-model-export.sh` for model conversion
+  * `wise-bench.sh` for validating runtime and AI environment
 
-* **Built for On-Device Applications**:
+* **Ready for Industrial Edge Use Cases**:
 
-  * Optimized for smart surveillance, industrial automation, retail analytics, and robotics
-  * Designed to run on the **Advantech AOM-2721** with **QCS6490 SoC**
+  * Built for robotics, medical imaging, automotive vision, industrial inspection, and smart agriculture
+  * Designed for use on **Advantech AOM-2721** with **QCS6490 SoC**
 
-* **Works Seamlessly with ROS 2.0**:
+* **Seamless ROS Support**:
 
-  * Compatible with the **Qualcomm Robotics Reference Distro with ROS 1.3-ver.1.1**
+  * Compatible with **Qualcomm Robotics Reference Distro with ROS 1.3-ver.1.1** for plug-and-play robotic integration
 
 ## Container Demo
-![Demo](%2Fdata%2Fgifs%2Fqc-yolo-det-demo.gif)
+![Demo](%2Fdata%2Fgifs%2Fqc-yolo-seg-demo.gif)
 
 ## Use Cases
 
-1. **Industrial Automation**
-   - Detect defective products on assembly lines in real time.
-   - Monitor safety zones to ensure operators stay clear of robotic arms.
-   - Track movement of tools or machinery parts for predictive maintenance.
+1. **Fitness & Rehabilitation**
 
-2. **Smart Retail**
-   - Customer behavior analytics (counting foot traffic, dwell time).
-   - Shelf monitoring for stock-out detection and planogram compliance.
-   - Automated checkout by detecting products without barcodes.
+   - Real-time exercise feedback: AI observe and correct posture during workouts for form optimization and injury prevention.
+   - Physical therapy training: Monitor patient movement and progression during rehab, enabling remote guidance.
 
-3. **Intelligent Transportation**
-   - Real-time vehicle and pedestrian detection at intersections.
-   - License plate localization for traffic management.
-   - Monitoring driver behavior and detecting distractions in cabins.
+2. **Automotive & Robotics**
 
-4. **Robotics and Drones**
-   - Object detection for autonomous navigation in warehouses or factories.
-   - Detecting obstacles, pallets, or delivery packages.
-   - Drone-based inspection of infrastructure (solar panels, power lines, bridges).
+   - Autonomous navigation: Segment road surfaces, lanes, pedestrians, vehicles, and traffic signs in real time to enable accurate path planning and obstacle avoidance.
+   - Robotic vision: Robots use scene-level segmentation to distinguish objects and environments, supporting tasks like pick-and-place, obstacle detection, and smooth human–robot interaction.
 
-5. **Smart City and Surveillance**
-   - Crowd density estimation and anomaly detection in public spaces.
-   - Vehicle detection for parking management.
-   - Perimeter surveillance with alerts for unauthorized entry.
+3. **Healthcare & Medical Imaging**
 
-6. **Healthcare and Assistive Systems**
-   - Detecting PPE compliance (masks, gloves, helmets).
-   - Monitoring patient activity in elderly care environments.
-   - Assisting visually impaired individuals by identifying nearby objects.
+   - Tumor and organ segmentation: Precisely isolate tumors, organs, and anatomical structures from CT, MRI, and X-ray images to improve diagnostics, surgical planning, and treatment monitoring.
+   - Quantitative analysis: Measure tissue volumes or morphological changes over time for progression tracking and intervention assessment.
 
-7. **Agriculture**
-   - Crop and livestock monitoring through aerial imaging.
-   - Detecting weeds, pests, or diseases in fields.
-   - Counting harvested produce in real time for yield estimation.
+4. **Satellite Imagery & Environmental Monitoring**
 
-8. **Edge AI Research & Development**
-   - Benchmarking new models on Qualcomm® DSP/GPU accelerators.
-   - Evaluating trade-offs between INT8 and FP32 inference on real workloads.
-   - Building custom datasets and retraining YOLOv8 for domain-specific applications.
+   - Land cover segmentation: Differentiate forest, water, urban, and agricultural regions in satellite images for land use classification and urban planning.
+   - Disaster response & climate monitoring: Detect changes due to floods, deforestation, or shoreline erosion to support rapid decision-making and environmental protection.
+
+5. **Smart Agriculture & Precision Farming**
+
+   - Crop and plant health monitoring: Segment healthy vs. diseased crops and estimate yield using drone or satellite imagery to drive targeted interventions and reduce waste.
+   - Weed detection: Separate weeds from crops to support precise herbicide application and bolster sustainable farming practices.
+
+6. **Industrial Inspection & Quality Control**
+
+   - Defect detection: Automatically identify scratches, cracks, or missing components on parts or PCBs in manufacturing pipelines to enable faster, more consistent quality checks.
+
+7. **Retail, eCommerce & AR Experiences**
+
+   - Virtual try-on & product isolation: Use foreground-background segmentation for virtual fitting rooms, product catalog consistency, and creative AR filters in apps.
+   - Visual search & background removal: Automatically isolate products for better search and seamless visual editing in eCommerce platforms.
+
+8. **Photography & Augmented Reality**
+
+   - Selective editing & live filters: Enable portrait mode, background swap, or object removal with pixel-precise segmentation (e.g., Meta’s Segment Anything).
+
+9. **Bio-Imaging & Research Applications**
+
+   - Cell and subcellular segmentation: Segment cells, nuclei, or organelles in high-throughput microscopy for single-cell analysis, gene expression profiling, or drug discovery.
+
+10. **Marine Ecology & Environmental Science**
+
+    - Coral reef monitoring: Use segmentation tools like *TagLab* to quantify coral bleaching and monitor reef health through aerial or underwater imagery.
+    - Shoreline mapping: Precisely segment the land-water boundary for erosion tracking, habitat assessment, and coastal planning.
 
 ## Key Features
 
 - **Complete AI Framework Stack:** QNN SDK (QNN, SNPE), LiteRT
 
-- **Edge AI Capabilities:** Optimized pipelines for real-time vision tasks (object detection)
+- **Edge AI Capabilities:** Optimized pipelines for real-time vision tasks (image segmentation)
 
 - **Preconfigured Environment:** Comes with all necessary tools pre-installed in a container
 
 - **Full DSP/GPU Acceleration:** Utilize Qualcomm® Hexagon™ DSP and Adreno™ GPU for fast and efficient inference
 
-- **Dual YOLOv8 Detection Workflows:** Support for both Qualcomm® AI Hub conversion and Ultralytics export methods, enabling better flexibility
+- **Dual Image Segmentation Workflows:** Support for both Qualcomm® AI Hub conversion and Ultralytics export methods, enabling better flexibility
 
 ## Host Device Prerequisites
 
@@ -139,7 +146,7 @@ This container offers:
 
 
 ### Container Quick Start Guide
-For container quick start, including the docker-compose file and more, please refer to [README.](https://github.com/Advantech-EdgeSync-Containers/Nagarro-Container-Project/blob/main/Object-Detection-on-Qualcomm-Hexagon/README.md)
+For container quick start, including the docker-compose file and more, please refer to [README.](https://github.com/Advantech-EdgeSync-Containers/Image-Segmentation-on-Qualcomm-Hexagon/blob/main/README.md)
 
 ### Supported AI Capabilities
 

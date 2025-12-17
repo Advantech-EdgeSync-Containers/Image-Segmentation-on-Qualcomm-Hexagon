@@ -43,7 +43,7 @@ echo "Exporting YOLO model: $model"
 yolo export model="$model" format=tflite int8=True imgsz=640
 
 # Find the full integer quantized model
-quant_model_file=$(find . -type f -name "*full_integer_quant.tflite" | head -n 1)
+quant_model_file=$(find . -type f -name "*integer_quant.tflite" | head -n 1)
 
 if [ -z "$quant_model_file" ]; then
     echo "Error: No full integer quantized model found!"

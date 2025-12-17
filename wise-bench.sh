@@ -566,6 +566,7 @@ done
 print_table_footer
 
 
+
 MAX=6
 QNN_GPU_STATUS=0
 QNN_DSP_STATUS=0
@@ -611,7 +612,6 @@ fi
 
 # LiteRT Delegate
 if [[ "$LITERT_STATUS" == "QNN TFLite Delegate Loaded" ]]; then
-
     print_table_row "LiteRT DSP Delegate" "$LITERT_VER " "Supported"
     LITERT_INSTALLATION_STATUS=1
 else
@@ -656,6 +656,9 @@ print_table_row "Progress" "$BAR"
 
 print_header "DIAGNOSTICS COMPLETE"
 print_header "All diagnostics completed"
+
+
+
 
 echo -e "${BOLD}>>> Diagnostic Completed at: $(date '+%Y-%m-%d %H:%M:%S')${NC}"
 echo

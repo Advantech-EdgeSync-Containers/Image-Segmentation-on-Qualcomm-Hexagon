@@ -77,4 +77,4 @@ echo "All setup complete"
 
 # Connect to container
 echo "Connecting to container..."
-docker exec -it Object-Detection-on-Qualcomm-Hexagon bash
+docker exec -it Image-Segmentation-on-Qualcomm-Hexagon bash

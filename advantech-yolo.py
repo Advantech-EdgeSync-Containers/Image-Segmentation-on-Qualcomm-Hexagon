@@ -1,6 +1,14 @@
 import argparse
 import os
+
+
+# Limit number of threads used by NumPy/OpenBLAS
+subprocess_thread = 4
+os.environ["OPENBLAS_NUM_THREADS"] = "4"  # Or 1 for deterministic performance
+os.environ["OMP_NUM_THREADS"] = "4"
+os.environ["NUMEXPR_NUM_THREADS"] = "4"
 os.environ["OPENCV_FFMPEG_CAPTURE_OPTIONS"] = "rtsp_transport;tcp"
+
 import sys
 import signal
 import cv2
@@ -17,32 +25,8 @@ import gi
 gi.require_version('Gst', '1.0')
 gi.require_version("GLib", "2.0")
 from gi.repository import Gst, GLib
-USE_THREAD = 0
 
 shutdown_requested = False
-
-main_frame_height = 0
-main_frame_width = 0
-# Declare as global variables, can be updated based trained model image size
-img_width = 640
-img_height = 640
-
-
-LABEL_PATH = "/etc/labels/coco_labels.txt"
-input_details = None
-output_details = None
-
-SCORE_THRESHOLD = 0.20
-NMS_IOU_THRESHOLD = 0.5
-INFERENCE_IMG_SIZE = 640
-MAX_DETS = 100
-
-ANCHORS = [[[81, 82], [135, 169], [344, 319]], [[23, 27], [37, 58], [81, 82]]]
-SIGMOID_FACTOR = [1.05, 1.05]
-NUM_ANCHORS = 3
-STRIDES = [32, 16]
-GRID_SIZES = [int(INFERENCE_IMG_SIZE / s) for s in STRIDES]
-
 COCO_CLASS_NAMES = [
     "person", "bicycle", "car", "motorcycle", "airplane", "bus", "train", "truck",
     "boat", "traffic light", "fire hydrant", "stop sign", "parking meter", "bench",
@@ -57,6 +41,89 @@ COCO_CLASS_NAMES = [
     "refrigerator", "book", "clock", "vase", "scissors", "teddy bear",
     "hair drier", "toothbrush"
 ]
+# Create a list of colors for each class where each color is a tuple of 3 integer values
+rng = np.random.default_rng(3)
+colors = rng.uniform(0, 255, size=(len(COCO_CLASS_NAMES), 3))
+
+
+#File save thread
+frame_queue = queue.Queue(maxsize=20)
+
+def writer_thread(out_writer, stop_event):
+    while not stop_event.is_set():
+        try:
+            frame = frame_queue.get(timeout=0.5)
+            out_writer.write(frame)
+        except queue.Empty:
+            continue
+    out_writer.release()
+            
+def draw_detections(image, boxes, scores, class_ids, mask_alpha=0.3, mask_maps=None):
+    img_height, img_width = image.shape[:2]
+    size = min([img_height, img_width]) * 0.0006
+    text_thickness = int(min([img_height, img_width]) * 0.001)
+
+    mask_img = draw_masks(image, boxes, class_ids, mask_alpha, mask_maps)
+
+    # Draw bounding boxes and labels of detections
+    for box, score, class_id in zip(boxes, scores, class_ids):
+        color = colors[class_id]
+
+        x1, y1, x2, y2 = box.astype(int)
+
+        # Draw rectangle
+        cv2.rectangle(mask_img, (x1, y1), (x2, y2), color, 2)
+
+        label = COCO_CLASS_NAMES[class_id]
+        caption = f'{label} {int(score * 100)}%'
+        (tw, th), _ = cv2.getTextSize(text=caption, fontFace=cv2.FONT_HERSHEY_SIMPLEX,
+                                      fontScale=size, thickness=text_thickness)
+        th = int(th * 1.2)
+
+        cv2.rectangle(mask_img, (x1, y1),
+                      (x1 + tw, y1 - th), color, -1)
+
+        cv2.putText(mask_img, caption, (x1, y1),
+                    cv2.FONT_HERSHEY_SIMPLEX, size, (255, 255, 255), text_thickness, cv2.LINE_AA)
+
+    return mask_img
+
+def draw_masks(image, boxes, class_ids, mask_alpha=0.8, mask_maps=None):
+    
+    if mask_maps is None or len(mask_maps) == 0:
+        return image
+
+    mask_img = image.copy()
+    
+    # Precompute colors for all masks
+    mask_colors = colors[class_ids].astype(np.uint8)
+
+    # Composite mask image (blank)
+    composite_mask = np.zeros_like(mask_img, dtype=np.uint8)  # Black mask
+
+
+    for i, box in enumerate(boxes):
+        x1, y1, x2, y2 = box.astype(int)
+        crop_mask = mask_maps[i, y1:y2, x1:x2]
+        if crop_mask.shape[0] == 0 or crop_mask.shape[1] == 0:
+            continue
+
+        # Resize mask to match box size
+        resized_mask = cv2.resize(crop_mask, (x2 - x1, y2 - y1), interpolation=cv2.INTER_LINEAR)
+
+        # Threshold mask
+        binary_mask = (resized_mask > 0.5).astype(np.uint8)
+
+        # Create colored mask
+        colored_mask = np.zeros((y2 - y1, x2 - x1, 3), dtype=np.uint8) #black mask
+        for c in range(3):
+            colored_mask[:, :, c] = binary_mask * mask_colors[i][c]
+
+        # Overlay into composite mask
+        composite_mask[y1:y2, x1:x2] = np.maximum(composite_mask[y1:y2, x1:x2], colored_mask) #black mask
+
+    # Blend final composite mask once
+    return cv2.addWeighted(composite_mask, mask_alpha, image, 1, 0)
 
 class QuitListener(threading.Thread):
     def __init__(self):
@@ -135,311 +202,233 @@ class VideoCaptureThread(threading.Thread):
         self.join()  # <- wait for thread to finish
         self.cap.release()
         
+class YOLOSeg:
 
-class LetterBox:
-    """Resizes and reshapes images while maintaining aspect ratio by adding padding, suitable for YOLO models."""
+    def __init__(self, path, conf_thres=0.7, iou_thres=0.5, num_masks=32):
+        self.conf_threshold = conf_thres
+        self.iou_threshold = iou_thres
+        self.num_masks = num_masks
 
-    def __init__(
-        self, new_shape=(img_width, img_height), auto=False, scaleFill=False, scaleup=True, center=True, stride=32
-    ):
-        """Initializes LetterBox with parameters for reshaping and transforming image while maintaining aspect ratio."""
-        self.new_shape = new_shape
-        self.auto = auto
-        self.scaleFill = scaleFill
-        self.scaleup = scaleup
-        self.stride = stride
-        self.center = center  # Put the image in the middle or top-left
+        # Initialize model
+        self.initialize_model(path)
 
-    def __call__(self, labels=None, image=None):
-        """Return updated labels and image with added border."""
-        if labels is None:
-            labels = {}
-        img = labels.get("img") if image is None else image
-        shape = img.shape[:2]  # current shape [height, width]
-        new_shape = labels.pop("rect_shape", self.new_shape)
-        if isinstance(new_shape, int):
-            new_shape = (new_shape, new_shape)
+    def __call__(self, image):
+        return self.segment_objects(image)
 
-        # Scale ratio (new / old)
-        r = min(new_shape[0] / shape[0], new_shape[1] / shape[1])
-        if not self.scaleup:  # only scale down, do not scale up (for better val mAP)
-            r = min(r, 1.0)
+    def initialize_model(self, path):
+        # Set backend_type value to 'htp'
+        TFLiteDelegate_lib_path = '/workspace/libs/libQnnTFLiteDelegate.so'
+        delegate = load_delegate(
+           TFLiteDelegate_lib_path,
+           options={
+                   'backend_type': 'htp',
+                   'htp_performance_mode': 3,
+                   }
+          )        
+        self.session = Interpreter(model_path=path, experimental_delegates=[delegate])
+        self.session.allocate_tensors()
 
-        # Compute padding
-        ratio = r, r  # width, height ratios
-        new_unpad = int(round(shape[1] * r)), int(round(shape[0] * r))
-        dw, dh = new_shape[1] - new_unpad[0], new_shape[0] - new_unpad[1]  # wh padding
-        if self.auto:  # minimum rectangle
-            dw, dh = np.mod(dw, self.stride), np.mod(dh, self.stride)  # wh padding
-        elif self.scaleFill:  # stretch
-            dw, dh = 0.0, 0.0
-            new_unpad = (new_shape[1], new_shape[0])
-            ratio = new_shape[1] / shape[1], new_shape[0] / shape[0]  # width, height ratios
+        # Get model info
+        self.get_input_details()
+        self.get_output_details()
 
-        if self.center:
-            dw /= 2  # divide padding into 2 sides
-            dh /= 2
-
-        if shape[::-1] != new_unpad:  # resize
-            img = cv2.resize(img, new_unpad, interpolation=cv2.INTER_LINEAR)
-        top, bottom = int(round(dh - 0.1)) if self.center else 0, int(round(dh + 0.1))
-        left, right = int(round(dw - 0.1)) if self.center else 0, int(round(dw + 0.1))
-        img = cv2.copyMakeBorder(
-            img, top, bottom, left, right, cv2.BORDER_CONSTANT, value=(114, 114, 114)
-        )  # add border
-        if labels.get("ratio_pad"):
-            labels["ratio_pad"] = (labels["ratio_pad"], (left, top))  # for evaluation
-
-        if len(labels):
-            labels = self._update_labels(labels, ratio, dw, dh)
-            labels["img"] = img
-            labels["resized_shape"] = new_shape
-            return labels
+    def segment_objects(self, image):
+        img_data = self.prepare_input(image)
+        # Quantization handling
+        if self.model_inputs[0]['dtype'] == np.uint8:
+            img_data = (img_data * 255).astype(np.uint8)
+        elif self.model_inputs[0]['dtype'] == np.int8:
+            scale, zero_point = self.model_inputs[0]["quantization"]
+            img_data = (img_data / scale + zero_point).astype(np.int8)
         else:
-            return img
+            img_data = img_data.astype(np.float32)  # for FP32 model
+        
+        self.session.set_tensor(self.model_inputs[0]["index"], img_data)
+        start = time.perf_counter()
+        self.session.invoke()
+        # print(f"Inference time: {(time.perf_counter() - start)*1000:.2f} ms")    
+        out0 = self.session.get_tensor(self.model_outputs[0]["index"]) # (1, 160, 160, 32)
+        out1 = self.session.get_tensor(self.model_outputs[1]["index"]) # (1, 116, 8400)
+       
+        #print("out1 shape: ",out1.shape) #out1 shape:  (1, 116, 8400)
+        
+        self.boxes, self.scores, self.class_ids, mask_pred = self.process_box_output(out1)#0 originally
+        self.mask_maps = self.process_mask_output(mask_pred, out0) #1 originally
+        return self.boxes, self.scores, self.class_ids, self.mask_maps
 
-    def _update_labels(self, labels, ratio, padw, padh):
-        """Update labels."""
-        labels["instances"].convert_bbox(format="xyxy")
-        labels["instances"].denormalize(*labels["img"].shape[:2][::-1])
-        labels["instances"].scale(*ratio)
-        labels["instances"].add_padding(padw, padh)
-        return labels
-
-
-class YolovTFLite:
-    """Class for performing object detection using YOLOv8 model converted to TensorFlow Lite format."""
-
-    def __init__(self, tflite_model, input_image, confidence_thres, iou_thres):
-        """
-        Initializes an instance of the Yolov8TFLite class.
-
-        Args:
-            tflite_model: Path to the TFLite model.
-            input_image: Path to the input image.
-            confidence_thres: Confidence threshold for filtering detections.
-            iou_thres: IoU (Intersection over Union) threshold for non-maximum suppression.
-        """
-        self.tflite_model = tflite_model
-        self.input_image = input_image
-        self.confidence_thres = confidence_thres
-        self.iou_thres = iou_thres
-
-        # Load the class names from the COCO dataset
-        # Load labels (if available)
-        if os.path.exists(LABEL_PATH):
-            with open(LABEL_PATH, 'r') as f:
-                self.classes = [line.strip() for line in f.readlines()]
-        else:
-            self.classes = COCO_CLASS_NAMES
-
-        # Generate a color palette for the classes
-        self.color_palette = np.random.uniform(0, 255, size=(len(self.classes), 3))
-        self.letterbox = LetterBox(new_shape=[img_width, img_height], auto=False, stride=32)
-
-
-    def draw_detections(self, img, box, score, class_id):
-        """
-        Draws bounding boxes and labels on the input image based on the detected objects.
-
-        Args:
-            img: The input image to draw detections on.
-            box: Detected bounding box.
-            score: Corresponding detection score.
-            class_id: Class ID for the detected object.
-
-        Returns:
-            None
-        """
-        # Extract the coordinates of the bounding box
-        x1, y1, w, h = box
-
-        # Retrieve the color for the class ID
-        color = self.color_palette[class_id]
-
-        # Draw the bounding box on the image
-        cv2.rectangle(img, (int(x1), int(y1)), (int(x1 + w), int(y1 + h)), color, 2)
-
-        # Create the label text with class name and score
-        label = f"{self.classes[class_id]}: {score:.2f}"
-
-        # Calculate the dimensions of the label text
-        (label_width, label_height), _ = cv2.getTextSize(label, cv2.FONT_HERSHEY_SIMPLEX, 1.2, 2)
-
-        # Calculate the position of the label text
-        label_x = x1
-        label_y = y1 - 10 if y1 - 10 > label_height else y1 + 10
-
-        # Draw a filled rectangle as the background for the label text
-        cv2.rectangle(
-            img,
-            (int(label_x), int(label_y - label_height)),
-            (int(label_x + label_width), int(label_y + label_height)),
-            color,
-            cv2.FILLED,
-        )
-
-        # Draw the label text on the image
-        cv2.putText(img, label, (int(label_x), int(label_y)), cv2.FONT_HERSHEY_SIMPLEX, 1.2, (255,255,255), 2, cv2.LINE_AA)
-
-    def preprocess(self):
+    def prepare_input(self, image):
         """
         Preprocesses the input image before performing inference.
 
         Returns:
             image_data: Preprocessed image data ready for inference.
         """
-        #print("image before", self.img)
         # Get the height and width of the input image
-        self.img_height, self.img_width = self.input_image.shape[:2]
+        self.img_height, self.img_width = image.shape[:2]
 
-        image = self.letterbox(image=self.input_image)
-        image = [image]
-        image = np.stack(image)
-        image = image[..., ::-1].transpose((0, 3, 1, 2))
-        img = np.ascontiguousarray(image)
-        # n, h, w, c
-        return img.astype(np.float32)/255
+        input_img = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
 
-    def postprocess_yolo8(self, input_image, output):
-        """
-        Performs post-processing on the model's output to extract bounding boxes, scores, and class IDs.
+        # Resize input image
+        input_img = cv2.resize(input_img, (self.input_width, self.input_height))
 
-        Args:
-            input_image (numpy.ndarray): The input image.
-            output (numpy.ndarray): The output of the model.
+        # Scale input pixel values to 0 to 1
+        input_img = input_img / 255.0
+        input_tensor = input_img[np.newaxis, :, :, :].astype(np.float32)
 
-        Returns:
-            numpy.ndarray: The input image with detections drawn on it.
-        """
-        boxes = []
-        scores = []
-        class_ids = []
-        for pred in output:
-            pred = np.transpose(pred)
-            for box in pred:
-                x, y, w, h = box[:4]
-                x1 = x - w / 2
-                y1 = y - h / 2
-                boxes.append([x1, y1, w, h])
-                idx = np.argmax(box[4:])
-                scores.append(box[idx + 4])
-                class_ids.append(idx)
+        return input_tensor
 
-        indices = cv2.dnn.NMSBoxes(boxes, scores, self.confidence_thres, self.iou_thres)
+    def process_box_output(self, box_output):
 
-        for i in indices:
-            # Get the box, score, and class ID corresponding to the index
-            box = boxes[i]
-            gain = min(img_width / self.img_width, img_height / self.img_height)
-            pad = (
-                round((img_width - self.img_width * gain) / 2 - 0.1),
-                round((img_height - self.img_height * gain) / 2 - 0.1),
-            )
-            box[0] = (box[0] - pad[0]) / gain
-            box[1] = (box[1] - pad[1]) / gain
-            box[2] = box[2] / gain
-            box[3] = box[3] / gain
-            score = scores[i]
-            class_id = class_ids[i]
-            if score > 0.5:
-                #print(box, score, class_id)
-                # Draw the detection on the input image
-                self.draw_detections(input_image, box, score, class_id)
+        predictions = np.squeeze(box_output).T
+        num_classes = box_output.shape[1] - self.num_masks - 4
 
-        return input_image
+        # Filter out object confidence scores below threshold
+        scores = np.max(predictions[:, 4:4+num_classes], axis=1)
+        predictions = predictions[scores > self.conf_threshold, :]
+        scores = scores[scores > self.conf_threshold]
 
-    def postprocess_yolo8_opt(self, input_image, output):
-        output = output[0]  # remove batch dimension
-        output = output.T  # shape: (N, 85) — [x, y, w, h, conf, class_scores...]
+        if len(scores) == 0:
+            return [], [], [], np.array([])
 
-        scores = output[:, 4:]
-        class_ids = np.argmax(scores, axis=1)
-        confidences = scores[np.arange(len(scores)), class_ids]
-
-        mask = confidences > self.confidence_thres
-        boxes = output[mask, :4]
-        confidences = confidences[mask]
-        class_ids = class_ids[mask]
-
-        if len(boxes) == 0:
-            return input_image
-
-        # Convert xywh to xyxy
-        boxes[:, 0] = boxes[:, 0] - boxes[:, 2] / 2  # x1
-        boxes[:, 1] = boxes[:, 1] - boxes[:, 3] / 2  # y1
-        boxes[:, 2] = boxes[:, 0] + boxes[:, 2]      # x2
-        boxes[:, 3] = boxes[:, 1] + boxes[:, 3]      # y2
-
-        # Scale to original image size
-        gain = min(img_width / self.img_width, img_height / self.img_height)
-        pad_x = (img_width - self.img_width * gain) / 2
-        pad_y = (img_height - self.img_height * gain) / 2
-
-        boxes[:, [0, 2]] -= pad_x
-        boxes[:, [1, 3]] -= pad_y
-        boxes /= gain
-
-        boxes = boxes.astype(np.int32).tolist()
-        confidences = confidences.tolist()
-        class_ids = class_ids.tolist()
-
-        # Apply NMS
-        indices = cv2.dnn.NMSBoxes(boxes, confidences, self.confidence_thres, self.iou_thres)
-        
-        for i in indices:
-            i = i[0] if isinstance(i, (list, tuple, np.ndarray)) else i
-            x1, y1, x2, y2 = boxes[i]
-            score = confidences[i]
-            class_id = class_ids[i]
-            w, h = x2 - x1, y2 - y1
-            self.draw_detections(input_image, (x1, y1, w, h), score, class_id)
-
-        return input_image
-        
-        
-    def detect_on_frame_yolo8n_full_quanta(self, frame):     
-        """
-        Performs inference using a TFLite model and returns the output image with drawn detections.
-
-        Returns:
-            output_img: The output image with drawn detections.
-        """
-        # Store the shape of the input for later use
-        input_shape = input_details[0]["shape"]
-        self.input_width = input_shape[1]
-        self.input_height = input_shape[2]
-
-        # Preprocess the image data
-        img_data = self.preprocess()
-        # Set the input tensor to the interpreter
-        img_data = img_data.transpose((0, 2, 3, 1))
-        
-  
-        # Quantization handling
-        if input_details[0]['dtype'] == np.uint8:
-            img_data = (img_data * 255).astype(np.uint8)
-        elif input_details[0]['dtype'] == np.int8:
-            scale, zero_point = input_details[0]["quantization"]
-            img_data = (img_data / scale + zero_point).astype(np.int8)
+        # Scale to image dimensions
+        if self.input_width == self.input_height :
+            box_predictions = predictions[..., :num_classes+4]*self.input_width
         else:
-            img_data = img_data.astype(np.float32)  # for FP32 model
-        self.model.set_tensor(input_details[0]["index"], img_data)
+            box_predictions = predictions[..., :num_classes+4]
+            box_predictions[:, [0, 2]] *= self.input_width
+            box_predictions[:, [1, 3]] *= self.input_height
+            
+        mask_predictions = predictions[..., num_classes+4:]
 
-        # Run inference
-        self.model.invoke()
+        # Get the class with the highest confidence
+        class_ids = np.argmax(box_predictions[:, 4:], axis=1)
 
-        # Get the output tensor from the interpreter
-        output = self.model.get_tensor(output_details[0]["index"])
-        scale, zero_point = output_details[0]["quantization"]
-        output = (output.astype(np.float32) - zero_point) * scale
-
-        output[:, [0, 2]] *= img_width
-        output[:, [1, 3]] *= img_height
-        # Perform post-processing on the outputs to obtain output image.
-        return self.postprocess_yolo8_opt(frame, output)
+        # Get bounding boxes for each object
+        boxes = self.extract_boxes(box_predictions)
 
 
+        # Prepare bounding boxes for OpenCV NMS: convert to [x, y, w, h]
+        cv2_boxes = []
+        for box in boxes:
+            x1, y1, x2, y2 = box
+            cv2_boxes.append([int(x1), int(y1), int(x2 - x1), int(y2 - y1)])
+
+        # Apply non-maxima suppression to suppress weak, overlapping bounding boxes
+        indices = cv2.dnn.NMSBoxes(
+            bboxes=cv2_boxes,
+            scores=scores.tolist(),
+            score_threshold=self.conf_threshold,
+            nms_threshold=self.iou_threshold
+        )
+
+        if len(indices) == 0:
+            return [], [], [], np.array([])
+
+        # cv2.dnn.NMSBoxes returns [[i], [j], ...], flatten it
+        indices = np.array(indices).flatten()
+
+        return boxes[indices], scores[indices], class_ids[indices], mask_predictions[indices]
+
+    def process_mask_output(self, mask_predictions, mask_output):
+        if mask_predictions.shape[0] == 0:
+            return []
+
+        mask_output = np.squeeze(mask_output)  # (H, W, N)
+        mask_output = np.transpose(mask_output, (2, 0, 1))  # (N, H, W)
+
+        mask_height, mask_width = mask_output.shape[1:]
+
+        # Flatten mask_output for matrix multiplication
+        mask_output_flat = mask_output.reshape(self.num_masks, -1)
+
+        # Fast sigmoid: mask = 1 / (1 + exp(-x))
+        masks = mask_predictions @ mask_output_flat
+        np.exp(-masks, out=masks)
+        masks += 1
+        np.reciprocal(masks, out=masks)
+        masks = masks.reshape((-1, mask_height, mask_width))
+
+        # Rescale boxes to mask resolution
+        scale_boxes = self.rescale_boxes(self.boxes,
+                                         (self.img_height, self.img_width),
+                                         (mask_height, mask_width))
+
+        mask_maps = np.zeros((len(scale_boxes), self.img_height, self.img_width), dtype=np.uint8)
+
+        for i in range(len(scale_boxes)):
+            scale_x1 = int(np.floor(scale_boxes[i][0]))
+            scale_y1 = int(np.floor(scale_boxes[i][1]))
+            scale_x2 = int(np.ceil(scale_boxes[i][2]))
+            scale_y2 = int(np.ceil(scale_boxes[i][3]))
+
+            x1 = int(np.floor(self.boxes[i][0]))
+            y1 = int(np.floor(self.boxes[i][1]))
+            x2 = int(np.ceil(self.boxes[i][2]))
+            y2 = int(np.ceil(self.boxes[i][3]))
+
+            scale_crop_mask = masks[i][scale_y1:scale_y2, scale_x1:scale_x2]
+            if scale_crop_mask.shape[0] == 0 or scale_crop_mask.shape[1] == 0:
+                continue
+
+            crop_mask = cv2.resize(scale_crop_mask, (x2 - x1, y2 - y1), interpolation=cv2.INTER_LINEAR)
+            mask_maps[i, y1:y2, x1:x2] = (crop_mask > 0.5).astype(np.uint8)
+
+        return mask_maps
+
+    def extract_boxes(self, box_predictions):
+        # Extract boxes from predictions
+        boxes = box_predictions[:, :4]
+
+        # Scale boxes to original image dimensions
+        boxes = self.rescale_boxes(boxes,
+                                   (self.input_height, self.input_width),
+                                   (self.img_height, self.img_width))
+
+        # Convert boxes to xyxy format
+        boxes[..., 0] = boxes[..., 0] - boxes[..., 2] / 2
+        boxes[..., 1] = boxes[..., 1] - boxes[..., 3] / 2
+        boxes[..., 2] = boxes[..., 0] + boxes[..., 2] 
+        boxes[..., 3] = boxes[..., 1] + boxes[..., 3] 
+
+        # Check the boxes are within the image
+        boxes[:, 0] = np.clip(boxes[:, 0], 0, self.img_width)
+        boxes[:, 1] = np.clip(boxes[:, 1], 0, self.img_height)
+        boxes[:, 2] = np.clip(boxes[:, 2], 0, self.img_width)
+        boxes[:, 3] = np.clip(boxes[:, 3], 0, self.img_height)
+
+        return boxes
+
+    def draw_detections(self, image, draw_scores=True, mask_alpha=0.4):
+        return draw_detections(image, self.boxes, self.scores,
+                               self.class_ids, mask_alpha)
+
+    def draw_masks(self, image, draw_scores=True, mask_alpha=0.5):
+        return draw_detections(image, self.boxes, self.scores,
+                               self.class_ids, mask_alpha, mask_maps=self.mask_maps)
+
+    def get_input_details(self):
+        self.model_inputs = self.session.get_input_details()
+
+        self.input_shape = self.model_inputs[0]["shape"]
+        self.input_height = self.input_shape[1]
+        self.input_width = self.input_shape[2]
+
+    def get_output_details(self):
+        self.model_outputs = self.session.get_output_details()
+
+    @staticmethod
+    def rescale_boxes(boxes, input_shape, image_shape):
+        """
+        Rescale bounding boxes from input resolution to original image resolution.
+        boxes: numpy array of shape (N, 4), format [x1, y1, x2, y2]
+        input_shape: (height, width) of model input
+        image_shape: (height, width) of the original image
+        """
+        input_shape = np.array([input_shape[1], input_shape[0], input_shape[1], input_shape[0]])
+        boxes = np.divide(boxes, input_shape, dtype=np.float32)
+        boxes *= np.array([image_shape[1], image_shape[0], image_shape[1], image_shape[0]])
+        return boxes
+       
 ALLOWED_RESOLUTIONS = [(640, 360), (640, 480), (1280, 720), (1920, 1080)]
 
 def get_video_nodes():
@@ -596,7 +585,7 @@ def main(args):
     # Initialize GStreamer
     Gst.init(None)
     
-    def periodic_check():
+    def periodic_check(): 
         if shutdown_requested:
             print("[INFO] Main loop termination requested (from periodic_check).")
             pipeline.set_state(Gst.State.NULL)
@@ -605,21 +594,6 @@ def main(args):
 
     GLib.timeout_add(200, periodic_check)   # check every 200 ms 
 
-    # Set backend_type value to 'htp'
-    TFLiteDelegate_lib_path = '/workspace/libs/libQnnTFLiteDelegate.so'
-    delegate = load_delegate(
-       TFLiteDelegate_lib_path,
-       options={
-               'backend_type': 'htp',
-               'htp_performance_mode': 3,
-               }
-      )        
-    interpreter = Interpreter(model_path=args.model, experimental_delegates=[delegate])
-    interpreter.allocate_tensors()
-    detection = YolovTFLite(args.model, None, args.conf_thres, args.iou_thres)
-    detection.model = interpreter
-    input_details = interpreter.get_input_details()
-    output_details = interpreter.get_output_details()
 
     prev_frame_time = 0
     new_frame_time = 0
@@ -627,6 +601,8 @@ def main(args):
     frame = None
     # Video source - GStreamer pipeline or camera
     main_frame_width, main_frame_height, source_fps = get_video_properties(args)
+    num_cores = os.cpu_count()
+    print(f"Logical CPU cores: {num_cores}")
     source_fps_numerator = int(round(source_fps))
     source_fps_denominator = 1
     
@@ -638,19 +614,24 @@ def main(args):
     cap_thread = VideoCaptureThread(args)
     cap_thread.start()
     
-    quit_thread = QuitListener() 
-    quit_thread.start()   
+    quit_thread = QuitListener()
+    quit_thread.start()          
 
+    # Initialize YOLOv8 Instance Segmentator
+    yoloseg = YOLOSeg(args.model, args.conf_thres, args.iou_thres)
     
     # Optional video writer
     out_writer = None
+    stop_event = threading.Event()
     if args.save:
-        fourcc = cv2.VideoWriter_fourcc(*'mp4v')
-        out_writer = cv2.VideoWriter(args.save, fourcc, source_fps, (main_frame_width, main_frame_height))
+        out_writer = cv2.VideoWriter(args.save, cv2.VideoWriter_fourcc(*'mp4v'),
+                                     source_fps, (main_frame_width, main_frame_height))
+        wt = threading.Thread(target=writer_thread, args=(out_writer, stop_event), daemon=True)
+        wt.start()
 
     # Setup GStreamer pipeline for display
     # Decide sync behavior based on your conditions
-    use_sync = not (args.source.startswith("/dev/video") or args.source.startswith("rtsp://") or source_fps > 30)
+    use_sync = not (args.source.startswith("/dev/video") or args.source.startswith("rtsp://") or source_fps > 20)
     print(f"Sync enabled: {use_sync}")
     
     gst_pipeline = (
@@ -665,8 +646,8 @@ def main(args):
         f"video/x-raw,format=BGR,width={main_frame_width},height={main_frame_height},framerate={source_fps_numerator}/{source_fps_denominator}"
     )
     
-    bus = pipeline.get_bus()
-    bus.add_signal_watch()
+    bus = pipeline.get_bus() 
+    bus.add_signal_watch()   
 
     def on_gst_message(bus, message, loop=None):
         global shutdown_requested
@@ -703,6 +684,9 @@ def main(args):
             print("Warning: push-buffer returned", retval)
 
     try:
+        cv2.setUseOptimized(True)
+        cv2.setNumThreads(subprocess_thread)  # Or adjust depending on CPU cores
+
         while True:
             if shutdown_requested:
                 print("[INFO] Shutdown requested. Breaking main loop.")
@@ -716,22 +700,21 @@ def main(args):
                     print("End of stream detected, exiting main loop.")
                     break
                 continue
-            #main_frame_height, main_frame_width = frame.shape[:2]
-            detection.input_image = frame
 
-            output_image = detection.detect_on_frame_yolo8n_full_quanta(frame)
+            yoloseg(frame)
+            output_image = yoloseg.draw_masks(frame)
+            
             new_frame_time = time.time()
             fps = 1 / (new_frame_time - prev_frame_time)
             prev_frame_time = new_frame_time
             
             # Draw FPS on the top-left corner
-            #print(f"FPS: {fps:.2f}")
             cv2.putText(output_image, f"FPS: {fps:.2f}", (10, 30),
                         cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 255, 0), 2)
             # Push frame to GStreamer display
             push_frame_to_gst(output_image)
             if out_writer:
-                out_writer.write(output_image)
+                frame_queue.put(output_image)
 
 
             # Check for quit (non-blocking)
@@ -745,12 +728,12 @@ def main(args):
 
     finally:
         if out_writer:
-            out_writer.release()
+            stop_event.set()
+            wt.join()
         cap_thread.stop()
         quit_thread.stop_flag = True
         appsrc.emit("end-of-stream")
         pipeline.set_state(Gst.State.NULL)
-
 
 def validate_probability(value):
     f = float(value)
@@ -768,7 +751,7 @@ def validate_cam_format(fmt):
     return fmt
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description="YOLOv8 TFLite Object Detection with GStreamer Display")
+    parser = argparse.ArgumentParser(description="YOLOv8 TFLite Image Segmentation with GStreamer Display")
     parser.add_argument(
         "--model",
         type=str,
@@ -787,10 +770,14 @@ if __name__ == "__main__":
             "Default: /etc/media/video.mp4"
         ),
     )
-    parser.add_argument("--conf-thres", type=validate_probability, default=0.5, help="Object confidence threshold (0.0–1.0). Default: 0.5")
-    parser.add_argument("--iou-thres", type=validate_probability, default=0.5, help="IoU threshold for Non-Maximum Suppression (0.0–1.0). Default: 0.5")
-    parser.add_argument("--cam-width" , type=int, default=1920, help="Camera capture width when using /dev/video* as source. Default: 1920.")
-    parser.add_argument("--cam-height", type=int, default=1080, help="Camera capture height when using /dev/video* as source. Default: 1080.")
+    parser.add_argument("--conf-thres", type=validate_probability, default=0.3,
+                        help="Object confidence threshold (0.0–1.0). Default: 0.3")
+    parser.add_argument("--iou-thres", type=validate_probability, default=0.5,
+                        help="IoU threshold for Non-Maximum Suppression (0.0–1.0). Default: 0.5")
+    parser.add_argument("--cam-width", type=int, default=1920,
+                        help="Camera capture width when using /dev/video* as source. Default: 1920.")
+    parser.add_argument("--cam-height", type=int, default=1080,
+                        help="Camera capture height when using /dev/video* as source. Default: 1080.")
     parser.add_argument("--cam-format", type=validate_cam_format, default="YUY2",
                         help=(
                             "Camera pixel format (V4L2). Allowed values:\n"
@@ -819,6 +806,7 @@ if __name__ == "__main__":
             print(f"[ERROR] Video source does not exist: {args.source}")
             sys.exit(1)
 
+
     if args.source and args.source.lower() == "discover":
         cam_params = select_webcam()
         if not cam_params:
@@ -841,7 +829,7 @@ if __name__ == "__main__":
 
         print(f"[INFO] Selected Camera: {args.source}")
         print(f"[INFO] Resolution: {args.cam_width}x{args.cam_height}, Format: {args.cam_format}")
-
+        
     main(args)
 
 

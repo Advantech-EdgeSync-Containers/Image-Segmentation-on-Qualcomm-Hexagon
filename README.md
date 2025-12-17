@@ -1,4 +1,4 @@
-# Object Detection on Qualcomm® Hexagon™
+# Image Segmentation on Qualcomm® Hexagon™
 
 **Version:** 1.0  
 **Release Date:** Aug 2025  
@@ -6,43 +6,42 @@
 
 ## Overview
 
-The `Object Detection on Qualcomm® Hexagon™` container image provides a comprehensive environment for Yolov8 object detection model on Qualcomm’s DSP-enabled hardware. This containerized setup ensures full hardware acceleration, reliability, and support for popular runtime environments like QNN, SNPE, and LiteRT.
-At the core of this project, **YOLOv8** is used as the object detection model. Two complementary workflows are supported:
+The `Image Segmentation on Qualcomm® Hexagon™` container image provides a comprehensive environment for Image Segmentation model on Qualcomm’s DSP-enabled hardware. This containerized setup ensures full hardware acceleration, reliability, and support for popular runtime environments like QNN, SNPE, and LiteRT.
+At the core of this project, **YOLOv8** and **Deeplabv3 Plus mobilenet** is used as the image segmentation model. Two complementary workflows are supported:
 
 1. **Ultralytics Export Workflow**  
    - An automated script directly leverages the **Ultralytics YOLOv8 export utilities**, producing model in TFlite format suitable to run on QCS6490 device utilizing Hexagon™ DSP.
    - Offers flexibility for quick prototyping and validation on the device.  
    - Ideal for iterative development/training where models may frequently change before being finalized.
 
-2. **AI Hub Conversion Workflow**  
-   - Models are converted using the Qualcomm® AI Hub toolchain via an automated script
+2. **Qualcomm Workflow**  
+   - Deeplabv3 Plus mobilenet Model is downloaded from Qualcomm’s Models repository via an automated script
    - This workflow ensures maximum utilization of the Hexagon™ DSP for INT8 inference acceleration.  
    - Best suited for quick deployments where optimized performance is critical.
 
-
-By combining these two approaches, the project balances rapid prototyping & deployment with Ultralytics and Qualcomm® AI Hub, making it suitable for diverse edge AI applications such as robotics, industrial vision, and smart surveillance etc.
+By combining these two approaches, the project balances rapid prototyping & deployment with Ultralytics and Qualcomm® based approaches, making it suitable for diverse edge AI applications such as robotics, industrial vision, and smart surveillance etc.
 
 
 ### Key Features
 
 - **Complete AI Framework Stack:** QNN SDK (QNN, SNPE), LiteRT
-- **Edge AI Capabilities:** Optimized pipelines for real-time vision tasks (object detection)
+- **Edge AI Capabilities:** Optimized pipelines for real-time vision tasks (image segmentation)
 - **Preconfigured Environment:** Comes with all necessary tools pre-installed in a container
 - **Full DSP/GPU Acceleration:** Utilize Qualcomm® Hexagon™ DSP and Adreno™ GPU for fast and efficient inference
-- **Dual YOLOv8 Detection Workflows:** Support for both Qualcomm® AI Hub conversion and Ultralytics export methods, enabling better flexibility
+- **Dual Image Segmentation Workflows:** Support for both Qualcomm® and Ultralytics export methods, enabling better flexibility
 
 
 ## Quick Demonstration
 
-Detection using Yolov8n Model
+Image Segmentation using Yolov8n Model
 
-![Demo](%2Fdata%2Fgifs%2Fqc-yolo-det-demo.gif)
+![Demo](%2Fdata%2Fgifs%2Fqc-yolo-seg-demo.gif)
 
 ## Architecture
 
 Ultralytics Workflow
 
-![Arch](./data/images/det-arch.PNG)
+![Arch](./data/images/seg-arch.PNG)
 
 ## Hardware Specifications
 
@@ -133,18 +132,17 @@ This container is intended for **QCOM Robotics Reference Distro with ROS**, vers
 
 ## Repository Structure
 ```
-Object-Detection-on-Qualcomm-Hexagon/
+Image-Segmentation-on-Qualcomm-Hexagon/
 ├── .env                                      # Environment configuration
 ├── data                                      # ReadMe Data (images, gifs etc.)
 ├── windows-git-setup.md                      # Steps to fix LF/CRLF issues on windows while copying to device
-├── AI_HUB_EXPORT_README.md                   # Qualcomm® AI Hub based Yolov8 model export guide
 ├── README.md                                 # Container overview and quick start steps
 ├── YOLO_EXPORT_README.md                     # Guide for Yolov8 Model export using ultralytics python package
 ├── build.sh                                  # Script to build the container
 ├── docker-compose.yml                        # Docker compose file
-├── advantech-aihub-model-export.sh           # Automated AI Hub based Yolov8 Detection model conversion script
-├── advantech-coe-model-export.sh             # Automated script to convert Yolov8 Detection model via ultralytics package
-├── advantech-yolo.py                         # Run Yolov8 Detection inference pipeline
+├── advantech-aihub-model-export.sh           # Automated Qualcomm Image Segmentation model export script
+├── advantech-coe-model-export.sh             # Automated script to convert Yolov8 Image Segmentation model via ultralytics package
+├── advantech-yolo.py                         # Run Yolov8 Image Segmentation inference pipeline
 ├── video/
 │   └── testvideo_720p_25FPS.mp4              # Test MP4 video with 720p resolution & 25 FPS
 └── wise-bench.sh                             # Script to verify AI software stack inside the container
@@ -158,17 +156,17 @@ Object-Detection-on-Qualcomm-Hexagon/
 > If you are on **Windows**, please follow the steps in [Windows Git Line Ending Setup](./windows-git-setup.md) before cloning to ensure scripts and configuration files work correctly on Device.
 
 ```bash
-git clone https://github.com/Advantech-EdgeSync-Containers/Nagarro-Container-Project.git
-cd Nagarro-Container-Project
+git clone https://github.com/Advantech-EdgeSync-Containers/Image-Segmentation-on-Qualcomm-Hexagon.git
+cd Image-Segmentation-on-Qualcomm-Hexagon
 ```
 
-### Transfer the `Object-Detection-on-Qualcomm-Hexagon` Folder to QCS6490 Board
+### Transfer the `Image-Segmentation-on-Qualcomm-Hexagon` Folder to QCS6490 Board
 
 If you cloned the repo on a **separate development machine**, use `scp` to transfer only the relevant folder:
 
 ```bash
 # From your development machine (Ubuntu or Windows PowerShell if SCP is installed)
-scp -r .\Object-Detection-on-Qualcomm-Hexagon\ <username>@<qcs6490-ip>:/home/<username>/
+scp -r .\Image-Segmentation-on-Qualcomm-Hexagon\ <username>@<qcs6490-ip>:/home/<username>/
 ```
 
 Replace:
@@ -176,13 +174,13 @@ Replace:
 * `<username>` – Login username on the QCS6490 board (e.g., `root`)
 * `<qcs6490-ip>` – IP address of the QCS6490 board (e.g., `192.168.1.42`)
 
-This will copy the folder to `/home/<username>/Object-Detection-on-Qualcomm-Hexagon/`.
+This will copy the folder to `/home/<username>/Image-Segmentation-on-Qualcomm-Hexagon/`.
 
 Then SSH into the board:
 
 ```bash
 ssh <username>@<qcs6490-ip>
-cd ~/Object-Detection-on-Qualcomm-Hexagon
+cd ~/Image-Segmentation-on-Qualcomm-Hexagon
 ```
 
 ### Installation
@@ -232,7 +230,7 @@ TensorFlow → LiteRT
 
 ## Model Export Options
 
-### Option 1 - Ultralytics Export Workflow: 
+### Option 1: 
 
 #### Export YOLOv8 Models via Local Script
 
@@ -255,7 +253,7 @@ python3 advantech-yolo.py --model=<MODEL_PATH> --source=<VIDEO_SOURCE> [--cam-wi
 
 Here’s what each field represents:
 * **`--model`**
-  *Required.* Path to the TFLite YOLOv8 model used for inference (e.g., `model/yolov8n_det.tflite`).
+  *Required.* Path to the TFLite YOLOv8 model used for inference (e.g., `model/yolov8n-seg_seg.tflite`).
 
 * **`--source`**
   *Optional (default: `/etc/media/video.mp4`).* Can be:
@@ -271,7 +269,7 @@ Here’s what each field represents:
   *Optional** (default: `1080`).* Applicable **only when `--source` is a webcam device**. Sets the webcam's capture height.
 
 * **`--conf-thres`**
-  *Optional (default: `0.5`).* Confidence threshold to filter out low-confidence detections (value between 0 and 1).
+  *Optional (default: `0.3`).* Confidence threshold to filter out low-confidence detections (value between 0 and 1).
 
 * **`--iou-thres`**
   *Optional (default: `0.5`).* Intersection-over-Union threshold governing Non-Maximum Suppression, removing overlapping detections.
@@ -279,50 +277,69 @@ Here’s what each field represents:
 * **`--save`**
   *Optional.* File path to save the annotated inference output as an MP4 video. The footage will still be displayed live via GStreamer.
 
+
 ##### Example Commands
 
-* **Run detection on a video file:**
+* **Run Image Segmentation on a video file:**
 
   ```bash
-  python3 advantech-yolo.py --model=model/yolov8n_det.tflite --source=video/testvideo_720p_25FPS.mp4
+  python3 advantech-yolo.py --model=model/yolov8n-seg_seg.tflite --source=video/testvideo_720p_25FPS.mp4
   ```
 * **Run detection via discover (e.g. `discover`):**
 
   ```bash
-  python3 advantech-yolo.py --model=model/yolov8n_det.tflite --source=discover
+  python3 advantech-yolo.py --model=model/yolov8n-seg_seg.tflite --source=discover
   ```
-* **Run detection via webcam (e.g. `/dev/video0`):**
+* **Run Image Segmentation via webcam (e.g. `/dev/video0`):**
 
   ```bash
-  python3 advantech-yolo.py --model=model/yolov8n_det.tflite --source=/dev/video0 --cam-width=1920 --cam-height=1080
+  python3 advantech-yolo.py --model=model/yolov8n-seg_seg.tflite --source=/dev/video0 --cam-width=1920 --cam-height=1080
   ```
 * **Display and Save to MP4 File:**
   ```bash
-  python3 advantech-yolo.py --model=model/yolov8n_det.tflite --source=video/testvideo_720p_25FPS.mp4 --save=output.mp4
+  python3 advantech-yolo.py --model=model/yolov8n-seg_seg.tflite --source=video/testvideo_720p_25FPS.mp4 --save=output.mp4
   ```
 ---
 
-### Option 2 - AI Hub Conversion Workflow: 
+### Option 2: 
 
-#### Export YOLOv8n from Qualcomm® AI Hub
+#### Download Model from Qualcomm® Hugging Face Repository
 
-For pulling models from Qualcomm’s cloud-based hub using an API token.
+This workflow uses the **Hugging Face** hosted model repository maintained by Qualcomm.
 
-[AI Hub Export Instructions](./AI_HUB_EXPORT_README.md)
+**Steps to perform the download:**
 
-#### Run AI Hub–Exported Model (GStreamer Application)
+```bash
+# Make the export script executable
+cd /workspace
+chmod +x advantech-aihub-model-export.sh
 
-Customize the AI detection application by editing the configuration file at `/etc/configs/config_detection.json`. This file defines the model, labels, runtime, and other essential settings.
+# Execute the script using your API token
+./advantech-aihub-model-export.sh
+```
+
+Upon successful execution, the following directories will be generated under `/etc/`:
+
+* `models/`  — Contains exported model files
+* `configs/` — Auto-generated configuration files
+* `media/`   — Sample media assets
+* `labels/`  — Label definitions for model usage
+
+**Source**: [Qualcomm Developer Docs](https://docs.qualcomm.com/bundle/publicresource/topics/80-70018-50/download-model-and-label-files.html)
 
 ---
-##### Configure the Detection Application
+#### Run Downloaded Model (GStreamer Application)
 
-You must edit the configuration file located at `/etc/configs/config_detection.json`. Here’s how to do it using `vi`, the standard command-line editor:
+Customize the AI Image Segmentation application by editing the configuration file at `/etc/configs/config_segmentation.json`. This file defines the model, labels, runtime, and other essential settings.
+
+##### Configure the Image Segmentation Application
+
+You must edit the configuration file located at `/etc/configs/config_segmentation.json`. Here’s how to do it using `vi`, the standard command-line editor:
 
 **1. Open the file in `vi`:**
 
 ```sh
-vi /etc/configs/config_detection.json
+vi /etc/configs/config_segmentation.json
 ```
 
 If the file does not exist, `vi` will create one for you.
@@ -356,7 +373,6 @@ If the file does not exist, `vi` will create one for you.
 {
   "file-path": "<input video path>",
   "ml-framework": "<snpe, tflite, or qnn>",
-  "yolo-model-type": "<yolov8, yolonas, or yolov5>",
   "model": "<Model Path>",
   "labels": "<Label Path>",
   "constants": "<Model Constants for LiteRT Model>",
@@ -368,21 +384,20 @@ If the file does not exist, `vi` will create one for you.
 Here’s what each field represents:
 
 * Use **either `file-path`** (for video input) **or `camera`** (for live camera stream), not both.
-	* `"file-path"`: Source of input video, e.g., `/etc/media/video.mp4`.
+	* `"file-path"`: Source of input video, e.g., `/etc/media/video1.mp4`.
 	* `"camera": 0` → Primary camera
 	* `"camera": 1` → Secondary camera
 * `ml-framework`: Runtime framework—choose one of `snpe`, `tflite`, or `qnn`.
-* `yolo-model-type`: Detection model family (e.g., `yolov8`).
 * `model`: Full path to the `.tflite` or `.dlc` model.
 * `labels`: Label file path mapping detection classes.
 * `constants`: Quantization metadata in the format:
 
   ```
-  YOLOv8,q-offsets=<21.0, 0.0, 0.0>,q-scales=<3.05,0.0038,1.0>;
+  deeplab,q-offsets=<0.0>,q-scales=<1.0>;
   ```
 
   Derived from your model’s quantization parameters.
-* `threshold`: Confidence cutoff for detections.
+* `threshold`: Confidence cutoff for Image Segmentation.
 * `runtime`: Preferred inference engine—`dsp` (recommended for edge), `cpu`, or `gpu`.
 
 ---
@@ -391,41 +406,41 @@ Here’s what each field represents:
 
 ```json
 {
-  "file-path": "/etc/media/video.mp4",
+  "file-path": "/etc/media/video1.mp4",
   "ml-framework": "tflite",
-  "yolo-model-type": "yolov8",
-  "model": "/etc/models/yolov8_det.tflite",
-  "labels": "/etc/labels/yolov8.labels",
-  "constants": "YOLOv8,q-offsets=<21.0, 0.0, 0.0>,q-scales=<3.0546178817749023, 0.003793874057009816, 1.0>;",
-  "threshold": 40,
+  "model": "/etc/models/deeplabv3_plus_mobilenet_quantized.tflite",
+  "labels": "/etc/labels/deeplabv3_resnet50.labels",
+  "constants": "deeplab,q-offsets=<0.0>,q-scales=<1.0>;",
+  "threshold":50,
   "runtime": "dsp"
 }
+
 ```
 
 This configuration:
 
-* Uses a TFLite-format YOLOv8 model running on the DSP.
-* Sets detection threshold to 40%.
+* Uses a TFLite-format Deeplabv3 Plus mobilenet model running on the DSP.
+* Sets Image Segmentation threshold to 50%.
 * Points to local paths for media, model, and labels.
 
 ---
 
-##### Execute the Detection Application
+##### Execute the Image Segmentation Application
 
 After saving your changes:
 
 ```bash
-gst-ai-object-detection --config-file=/etc/configs/config_detection.json
+gst-ai-segmentation --config-file=/etc/configs/config_segmentation.json
 ```
 
-You'll see the input video annotated in real time—displayed with bounding boxes around detected objects, based on your configuration.
+You'll see the input video annotated in real time—displayed with bounding boxes and segmentation mask on detected objects, based on your configuration.
 
 ---
 
 #### Important Note: Format & Resolution Support
 
-* This GStreamer-based detection workflow **only supports MP4 and MOV input formats** and is reliably tested at **1080p resolution (1920×1080)**. Using lower resolutions (e.g., 720p or below) may result in misaligned detection boxes due to scaling and aspect ratio handling issues with the video sink.
-* In the camera mode, **gst-ai-object-detection** relies on the **qtiqmmfsrc** GStreamer plugin, which is designed to interface with **MIPI‑CSI** connected cameras only. USB webcams are not supported. [Qualcomm® Camera Overview](https://docs.qualcomm.com/bundle/publicresource/topics/80-70020-17/camera-overview.html?vproduct=1601111740013072&version=1.5&facet=Camera)
+* This GStreamer-based Image Segmentation workflow **only supports MP4 and MOV input formats** and is reliably tested at **1080p resolution (1920×1080)**. Using lower resolutions (e.g., 720p or below) may result in misaligned detection boxes and segmentation mask due to scaling and aspect ratio handling issues with the video sink.
+* In the camera mode, **gst-ai-segmentation** relies on the **qtiqmmfsrc** GStreamer plugin, which is designed to interface with **MIPI‑CSI** connected cameras only. USB webcams are not supported. [Qualcomm Camera Overview](https://docs.qualcomm.com/bundle/publicresource/topics/80-70020-17/camera-overview.html?vproduct=1601111740013072&version=1.5&facet=Camera)
 
 ## Known Limitations
 
@@ -434,7 +449,7 @@ You'll see the input video annotated in real time—displayed with bounding boxe
 * **GStreamer Debug Level:**
    Using `GST_DEBUG=2` or higher may cause the video output to appear in **random positions on screen** or behave unexpectedly.
    Use `GST_DEBUG=0` or `GST_DEBUG=1` for stable video playback.
-* **Resolution-Dependent Alignment Issues**: Option 2 is optimized for resolutions at or above **1080p**. **Below 1080p**, detection boxes may appear **misaligned** with objects due to scaling artifacts and coordinate rounding.
+* **Resolution-Dependent Alignment Issues**: Option 2 is optimized for resolutions at or above **1080p**. **Below 1080p**, detection boxes and segmentation mask may appear **misaligned** with objects due to scaling artifacts and coordinate rounding.
 
 
 
@@ -445,7 +460,6 @@ You'll see the input video annotated in real time—displayed with bounding boxe
 | Component                        | Reason / Note                                    |
 | -------------------------------- | ------------------------------------------------ |
 | Pre-exported YOLO models         | Must be exported manually using provided scripts |
-| Qualcomm® AI Hub API Token        | User must create account and retrieve token      |
 | Full training datasets           | Outside scope of this deployment repo            |
 
 ---
@@ -459,46 +473,52 @@ You'll see the input video annotated in real time—displayed with bounding boxe
 
 ## Possible Use Cases
 
-### 1. Industrial Automation
-- Detect defective products on assembly lines in real time.
-- Monitor safety zones to ensure operators stay clear of robotic arms.
-- Track movement of tools or machinery parts for predictive maintenance.
+### 1. Fitness & Rehabilitation
 
-### 2. Smart Retail
-- Customer behavior analytics (counting foot traffic, dwell time).
-- Shelf monitoring for stock-out detection and planogram compliance.
-- Automated checkout by detecting products without barcodes.
+- Real-time exercise feedback: AI observe and correct posture during workouts for form optimization and injury prevention.
+- Physical therapy training: Monitor patient movement and progression during rehab, enabling remote guidance.
 
-### 3. Intelligent Transportation
-- Real-time vehicle and pedestrian detection at intersections.
-- License plate localization for traffic management.
-- Monitoring driver behavior and detecting distractions in cabins.
+### 2. Automotive & Robotics
 
-### 4. Robotics and Drones
-- Object detection for autonomous navigation in warehouses or factories.
-- Detecting obstacles, pallets, or delivery packages.
-- Drone-based inspection of infrastructure (solar panels, power lines, bridges).
+- Autonomous navigation: Segment road surfaces, lanes, pedestrians, vehicles, and traffic signs in real time to enable accurate path planning and obstacle avoidance.
+- Robotic vision: Robots use scene-level segmentation to distinguish objects and environments, supporting tasks like pick-and-place, obstacle detection, and smooth human–robot interaction.
 
-### 5. Smart City and Surveillance
-- Crowd density estimation and anomaly detection in public spaces.
-- Vehicle detection for parking management.
-- Perimeter surveillance with alerts for unauthorized entry.
+### 3. Healthcare & Medical Imaging
 
-### 6. Healthcare and Assistive Systems
-- Detecting PPE compliance (masks, gloves, helmets).
-- Monitoring patient activity in elderly care environments.
-- Assisting visually impaired individuals by identifying nearby objects.
+- Tumor and organ segmentation: Precisely isolate tumors, organs, and anatomical structures from CT, MRI, and X-ray images to improve diagnostics, surgical planning, and treatment monitoring.
+- Quantitative analysis: Measure tissue volumes or morphological changes over time for progression tracking and intervention assessment.
 
-### 7. Agriculture
-- Crop and livestock monitoring through aerial imaging.
-- Detecting weeds, pests, or diseases in fields.
-- Counting harvested produce in real time for yield estimation.
+### 4. Satellite Imagery & Environmental Monitoring
 
-### 8. Edge AI Research & Development
-- Benchmarking new models on Qualcomm® DSP/GPU accelerators.
-- Evaluating trade-offs between INT8 and FP32 inference on real workloads.
-- Building custom datasets and retraining YOLOv8 for domain-specific applications.
+- Land cover segmentation: Differentiate forest, water, urban, and agricultural regions in satellite images for land use classification and urban planning.
+- Disaster response & climate monitoring: Detect changes due to floods, deforestation, or shoreline erosion to support rapid decision-making and environmental protection.
 
+### 5. Smart Agriculture & Precision Farming
+
+- Crop and plant health monitoring: Segment healthy vs. diseased crops and estimate yield using drone or satellite imagery to drive targeted interventions and reduce waste.
+- Weed detection: Separate weeds from crops to support precise herbicide application and bolster sustainable farming practices.
+
+### 6. Industrial Inspection & Quality Control
+
+- Defect detection: Automatically identify scratches, cracks, or missing components on parts or PCBs in manufacturing pipelines to enable faster, more consistent quality checks.
+
+### 7. Retail, eCommerce & AR Experiences
+
+- Virtual try-on & product isolation: Use foreground-background segmentation for virtual fitting rooms, product catalog consistency, and creative AR filters in apps.
+- Visual search & background removal: Automatically isolate products for better search and seamless visual editing in eCommerce platforms.
+
+### 8. Photography & Augmented Reality
+
+- Selective editing & live filters: Enable portrait mode, background swap, or object removal with pixel-precise segmentation (e.g., Meta’s Segment Anything).
+
+### 9. Bio-Imaging & Research Applications
+
+- Cell and subcellular segmentation: Segment cells, nuclei, or organelles in high-throughput microscopy for single-cell analysis, gene expression profiling, or drug discovery.
+
+### 10. Marine Ecology & Environmental Science
+
+- Coral reef monitoring: Use segmentation tools like *TagLab* to quantify coral bleaching and monitor reef health through aerial or underwater imagery.
+- Shoreline mapping: Precisely segment the land-water boundary for erosion tracking, habitat assessment, and coastal planning.
 
 ## Acknowledgments
 
@@ -508,5 +528,5 @@ You'll see the input video annotated in real time—displayed with bounding boxe
   python3 -m pip install ultralytics==8.3.176 --no-deps
   python3 -m pip install ultralytics-thop==2.0.0 --no-deps
   ```
-  
+
 © 2025 Advantech Corporation. All rights reserved.

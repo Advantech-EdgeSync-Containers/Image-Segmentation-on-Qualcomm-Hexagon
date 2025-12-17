@@ -1,14 +1,15 @@
 version: "3.8"
 services:
-  object-detection-on-qualcomm-hexagon:
-    container_name: Object-Detection-on-Qualcomm-Hexagon
-    image: harbor.edgesync.cloud/nagarro-container-images/object-detection-on-qualcomm-hexagon:v1
+  image-segmentation-on-qualcomm-hexagon:
+    container_name: Image-Segmentation-on-Qualcomm-Hexagon
+    image: harbor.edgesync.cloud/nagarro-container-images/image-segmentation-on-qualcomm-hexagon:v1
     user: "0:0"
     privileged: true
     volumes:
       - ./advantech-yolo.py:/workspace/advantech-yolo.py
       - ./video:/workspace/video
       - ./advantech-coe-model-export.sh:/workspace/advantech-coe-model-export.sh
+      - ./advantech-aihub-model-export.sh:/workspace/advantech-aihub-model-export.sh
       - ./wise-bench.sh:/workspace/wise-bench.sh
       - /etc/xdg/weston:/etc/xdg/weston
       - /usr/share/X11:/usr/share/X11
